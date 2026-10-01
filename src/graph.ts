@@ -10,7 +10,7 @@
  *
  * Print the graph as a Mermaid diagram with `npm run graph`.
  */
-import { END, START, StateGraph } from "@langchain/langgraph";
+import { END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
 import { routeAfterLoad, routeByIntent } from "./edges";
 import {
   answerInfo,
@@ -58,8 +58,8 @@ export function buildGraph() {
     // ✅ Check: npx vitest run tests/unit/1-
     .addEdge("classify_intent", "ask_clarification");
 
-  // 🔲 TODO 4 — `interrupt()` needs a CHECKPOINTER: it saves the state after
-  // every step so a paused run can be resumed later (same `thread_id`).
-  // Pass `{ checkpointer: new MemorySaver() }` to compile().
-  return builder.compile();
+  // ✅ TODO 4 (solved) — a checkpointer saves the state after every step, which
+  // is what lets `interrupt()` pause the graph and resume it later, and what
+  // keeps the conversation of a thread between turns.
+  return builder.compile({ checkpointer: new MemorySaver() });
 }

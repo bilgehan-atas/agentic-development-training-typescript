@@ -23,13 +23,7 @@ import { interrupt } from "@langchain/langgraph";
  * no LLM calls (they may answer differently the second time), no API calls.
  * That's why cancelling is split into `cancel_booking` (LLM) → `confirm_cancel` (ask + act).
  */
-// 🔲 TODO 4 — right now every action is auto-approved. Make it ask a human:
-//   1. const answer = interrupt({ question: `${action} Approve? (y/n)` });
-//      (main.ts already prints `question` and resumes with what you type.)
-//   2. Return true only for "y" / "yes" (case-insensitive).
-//   3. In graph.ts, compile the graph with a checkpointer (see the TODO 4 note there).
-// ✅ Check: npx vitest run tests/unit/4-
-//    Try:   npm start -- "Cancel ABC123"   → answer "n" and check nothing was cancelled
 export function requireApproval(action: string): boolean {
-  return true;
+  const answer = interrupt({ question: `${action} Approve? (y/n)` });
+  return answer === true || /^\s*y(es)?\s*$/i.test(String(answer));
 }
