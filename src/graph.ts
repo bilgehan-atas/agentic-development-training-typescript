@@ -10,7 +10,7 @@
  *
  * Print the graph as a Mermaid diagram with `npm run graph`.
  */
-import { END, START, StateGraph } from "@langchain/langgraph";
+import { END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
 import { routeAfterLoad, routeByIntent } from "./edges";
 import {
   answerInfo,
@@ -39,27 +39,24 @@ export function buildGraph() {
     .addEdge("report_error", END)
     .addEdge("ask_clarification", END)
 
-    // 🔲 TODO 1 — make the graph branch on the user's intent.
-    //   a) Register 4 more NODES with .addNode(name, fn):
-    //        "answer_info" → answerInfo, "cancel_booking" → cancelBooking,
-    //        "confirm_cancel" → confirmCancel, "travel_agent" → travelAgent
-    //        (all imported above)
-    //   b) Replace the plain edge below with a CONDITIONAL EDGE from
-    //      "classify_intent" that calls `routeByIntent` (src/edges.ts) and can
-    //      go to: "answer_info", "cancel_booking", "travel_agent", "ask_clarification".
-    //      👀 Copy the `load_context` conditional edge above.
-    //   c) Add plain EDGES with .addEdge(...):
-    //        "cancel_booking" → "confirm_cancel"   (a 2-step workflow, see TODO 3)
-    //        "answer_info", "confirm_cancel", "travel_agent" → END
-    //
-    // Right now every request ends up in ask_clarification. LangGraph refuses
-    // to compile a graph with unreachable nodes — that's why these nodes are
-    // not registered yet. Run `npm run graph` before and after!
-    // ✅ Check: npx vitest run tests/unit/1-
-    .addEdge("classify_intent", "ask_clarification");
+    // ✅ TODO 1 (solved)
+    .addNode("answer_info", answerInfo)
+    .addNode("cancel_booking", cancelBooking)
+    .addNode("confirm_cancel", confirmCancel)
+    .addNode("travel_agent", travelAgent)
+    .addConditionalEdges("classify_intent", routeByIntent, [
+      "answer_info",
+      "cancel_booking",
+      "travel_agent",
+      "ask_clarification",
+    ])
+    .addEdge("cancel_booking", "confirm_cancel")
+    .addEdge("answer_info", END)
+    .addEdge("confirm_cancel", END)
+    .addEdge("travel_agent", END);
 
-  // 🔲 TODO 4 — `interrupt()` needs a CHECKPOINTER: it saves the state after
-  // every step so a paused run can be resumed later (same `thread_id`).
-  // Pass `{ checkpointer: new MemorySaver() }` to compile().
-  return builder.compile();
+  // ✅ TODO 4 (solved) — a checkpointer saves the state after every step, which
+  // is what lets `interrupt()` pause the graph and resume it later, and what
+  // keeps the conversation of a thread between turns.
+  return builder.compile({ checkpointer: new MemorySaver() });
 }

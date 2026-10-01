@@ -75,34 +75,20 @@ export const changeBookingTool = tool(
   },
 );
 
-// 🔲 TODO 5 (part 1 of 2) — give the travel agent a `cancel_pnr` tool.
-//
-// Part 2 is `travelAgent` in src/nodes.ts. An agent can only do what its tools
-// allow: without this tool, "Cancel ABC123 and book the Friday evening flight
-// instead" fails because the agent has no way to cancel. Build the tool:
-//   - name:        "cancel_pnr"
-//   - description: tell the LLM WHAT it does and WHEN to use it (vs. change_booking)
-//   - schema:      z.object({ pnrCode: z.string().describe(...) })
-//   - function:    `run(() => api.cancel(pnrCode))`
-// Then add it to `travelTools` below, and give it an approval rule in `interruptOn`
-// (cancelling moves money too!).
-//
-// 👀 `changeBookingTool` is almost identical.
-// ✅ Check: npx vitest run tests/unit/5-cancel-tool
-export const cancelPnrTool = tool(
-  async () => {
-    throw new Error("TODO 5: implement cancelPnrTool in src/tools.ts");
-  },
-  {
-    name: "todo",
-    description: "TODO",
-    schema: z.object({}),
-  },
-);
+// ✅ TODO 5 (solved)
+export const cancelPnrTool = tool(async ({ pnrCode }) => run(() => api.cancel(pnrCode)), {
+  name: "cancel_pnr",
+  description:
+    "Cancel an existing ACTIVE booking (PNR). Refunds the paid price minus the cancellation " +
+    "fee to the user's balance. Use it only when the user wants to cancel without rebooking.",
+  schema: z.object({
+    pnrCode: z.string().describe("6-character booking code, e.g. ABC123"),
+  }),
+});
 
-export const travelTools = [listFlightsTool, bookFlightTool, changeBookingTool];
+export const travelTools = [listFlightsTool, bookFlightTool, changeBookingTool, cancelPnrTool];
 
-// ✅ GIVEN (except the cancel_pnr rule — TODO 5) — which tool calls need a human's OK.
+// ✅ GIVEN (+ the cancel_pnr rule: TODO 5 solved) — which tool calls need a human's OK.
 //
 // Passed to `humanInTheLoopMiddleware({ interruptOn })` in `travelAgent`. When the
 // LLM asks for one of these tools, the middleware calls `interrupt()` BEFORE the
@@ -119,5 +105,9 @@ export const interruptOn: Record<string, InterruptOnConfig> = {
   change_booking: {
     allowedDecisions: approveOrReject,
     description: (call) => `Move booking ${call.args.pnrCode} to flight ${call.args.newFlightId}.`,
+  },
+  cancel_pnr: {
+    allowedDecisions: approveOrReject,
+    description: (call) => `Cancel booking ${call.args.pnrCode}.`,
   },
 };

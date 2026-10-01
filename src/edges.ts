@@ -11,20 +11,18 @@ export function routeAfterLoad(state: State): "classify_intent" | "report_error"
   return state.error ? "report_error" : "classify_intent";
 }
 
-// 🔲 TODO 1 — the routing function for the conditional edge after `classify_intent`.
-//
-// `classify_intent` stores one of "info" | "cancel" | "travel" | "unclear" in
-// `state.intent`. Return the node that should handle it:
-//
-//   info    → "answer_info"
-//   cancel  → "cancel_booking"
-//   travel  → "travel_agent"
-//   unclear → "ask_clarification"   (also use this when `intent` is missing)
-//
-// 👀 Look at `routeAfterLoad` above for the pattern.
-// ✅ Check: npx vitest run tests/unit/1-
+// ✅ TODO 1 (solved)
 export function routeByIntent(
   state: State,
 ): "answer_info" | "cancel_booking" | "travel_agent" | "ask_clarification" {
-  throw new Error("TODO 1: implement routeByIntent in src/edges.ts");
+  switch (state.intent) {
+    case "info":
+      return "answer_info";
+    case "cancel":
+      return "cancel_booking";
+    case "travel":
+      return "travel_agent";
+    default:
+      return "ask_clarification";
+  }
 }
