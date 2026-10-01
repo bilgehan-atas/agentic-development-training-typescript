@@ -77,26 +77,21 @@ export const classifyIntent: Node = async (state) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔲 TODO 2 — plain LLM invocation: `llm.invoke(messages)`.
+// ✅ TODO 2 (solved) — plain LLM invocation: `llm.invoke(messages)`.
 //
-// Answer questions about the account ("What's my balance?", "Which bookings
+// Answers questions about the account ("What's my balance?", "Which bookings
 // do I have?") using ONLY the data loaded by `loadContext`. No tools needed:
-// everything the model needs can be put into the prompt.
-//
-// Steps:
-//   1. Build a SystemMessage that tells the model it is an airline assistant
-//      and gives it the account data: `describeUser(state.user)`.
-//      (Adding `todayLine()` helps with questions like "my next flight".)
-//   2. `await llm.invoke([systemMessage, ...state.messages])`
-//      (the whole conversation, so follow-up questions work) → returns an AIMessage.
-//   3. Return `{ messages: [thatAIMessage] }` — the reducer APPENDS it.
-//
-// 👀 `classifyIntent` above does almost the same (but with structured output).
-// ✅ Check: npx vitest run tests/unit/2-
-//    Try:   npm start -- "What is my balance and which bookings do I have?"
+// everything the model needs is already in the prompt.
 // ─────────────────────────────────────────────────────────────────────────────
 export const answerInfo: Node = async (state) => {
-  return reply("TODO 2: implement answerInfo in src/nodes.ts");
+  const response = await llm.invoke([
+    new SystemMessage(
+      `You are a helpful airline assistant. ${todayLine()}\n` +
+        `Answer the user's latest question briefly, using ONLY this account data:\n\n${describeUser(state.user)}`,
+    ),
+    ...state.messages,
+  ]);
+  return { messages: [response] };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
