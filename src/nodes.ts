@@ -100,44 +100,47 @@ export const answerInfo: Node = async (state) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔲 TODO 3 — a fixed WORKFLOW of two nodes: the LLM fills in one blank, code does the rest.
+// ✅ TODO 3 (solved) — a fixed WORKFLOW of two nodes: the LLM fills in one blank,
+// code does the rest.
 //
-//   cancel_booking  (part 1)  LLM with structured output → which PNR does the user mean?
-//                             Stores it in `state.pnrCode`. Nothing else!
-//   confirm_cancel  (part 2)  Code → ask for approval, call POST /cancel, format the answer.
+//   cancel_booking  LLM with structured output → which PNR does the user mean?
+//   confirm_cancel  Code → ask for approval, call POST /cancel, format the answer.
 //
-// Why two nodes? `requireApproval()` pauses the graph, and on resume LangGraph
-// re-runs the paused node FROM ITS FIRST LINE. If the LLM call were in the same
-// node, it would run again — and could pick a different booking than the one the
-// user just approved. Code before an interrupt must be safe to repeat.
+// Two nodes, because on resume LangGraph re-runs the paused node from its first
+// line: the LLM call must not be in the node that calls `requireApproval()`,
+// or it could pick a different booking than the one the user approved.
 //
 // Compare with `travelAgent` below, where the LLM decides the steps itself.
-//
-// Part 1 — cancelBooking:
-//   1. Create an extractor: `llm.withStructuredOutput(z.object({ pnrCode: z.string().describe(...) }))`
-//      Tell it (in `.describe`) to return an empty string when it is unclear.
-//   2. Invoke it with a SystemMessage containing `describeUser(state.user)` — so
-//      "cancel my Oct 22 flight" can be mapped to a code — followed by `...state.messages`.
-//   3. Return `{ pnrCode }`, trimmed + upper-cased (it may be "").
-//
-// Part 2 — confirmCancel (reads `state.pnrCode`; no LLM here!):
-//   1. If the code is empty, `return reply("Which booking…?")`.
-//   2. If !requireApproval(`Cancel booking ${code}.`) → reply that nothing was cancelled.
-//      (It auto-approves until you do TODO 4.)
-//   3. `await api.cancel(code)` → reply with the refund and the new balance.
-//      Catch `ApiError` (e.g. "PNR is not active") and reply with its message.
-//
-// 👀 `classifyIntent` (structured output), `loadContext` (API call + try/catch),
-//    `askClarification` (the `reply()` helper).
-// ✅ Check: npx vitest run tests/unit/3-
-//    Try:   npm start -- "Please cancel my booking ABC123"
 // ─────────────────────────────────────────────────────────────────────────────
 export const cancelBooking: Node = async (state) => {
-  return { pnrCode: "" }; // TODO 3 (part 1): implement cancelBooking in src/nodes.ts
+  const extractor = llm.withStructuredOutput(
+    z.object({
+      pnrCode: z.string().describe("The 6-character booking code to cancel, or an empty string if unclear"),
+    }),
+  );
+  const { pnrCode } = await extractor.invoke([
+    new SystemMessage(
+      `Find the booking the user wants to cancel in their latest message. ${todayLine()}\n` +
+        `The user's bookings:\n${describeUser(state.user)}`,
+    ),
+    ...state.messages,
+  ]);
+  return { pnrCode: pnrCode.trim().toUpperCase() };
 };
 
 export const confirmCancel: Node = async (state) => {
-  return reply("TODO 3: implement cancelBooking and confirmCancel in src/nodes.ts");
+  const code = state.pnrCode;
+  if (!code) return reply("Which booking would you like to cancel? Please give me its PNR code.");
+
+  if (!requireApproval(`Cancel booking ${code}.`)) return reply(`OK, booking ${code} was NOT cancelled.`);
+
+  try {
+    const { refund, balance } = await api.cancel(code);
+    return reply(`Booking ${code} is cancelled. Refund: ${refund} EUR. New balance: ${balance} EUR.`);
+  } catch (err) {
+    if (err instanceof ApiError) return reply(`Could not cancel ${code}: ${err.message}.`);
+    throw err;
+  }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
