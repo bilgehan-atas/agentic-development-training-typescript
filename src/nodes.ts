@@ -141,44 +141,34 @@ export const confirmCancel: Node = async (state) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔲 TODO 5 (part 2 of 2) — an AGENT built with LangChain's `createAgent`.
+// ✅ TODO 5 (solved) — an AGENT built with LangChain's `createAgent`.
 //
-// Do part 1 first: the `cancel_pnr` tool (+ its approval rule) in src/tools.ts.
+// `createAgent` runs a loop:  LLM → (tool calls → tool results → LLM)* → answer.
+// We don't hard-code the steps. For "move ABC123 to the cheapest flight next
+// week" the model decides to call list_flights, compare prices, then call
+// change_booking, and finally explains what it did.
 //
-// Handles everything that needs the flight schedule: search, book, change.
-// Unlike `cancelBooking`, we do NOT hard-code the steps. `createAgent` runs a loop:
+// `humanInTheLoopMiddleware` pauses after the LLM picked its tool calls and
+// BEFORE any of them runs, asking about each money-moving one (`interruptOn`).
 //
-//     LLM → (tool calls → tool results → LLM)* → final answer
-//
-// For "move ABC123 to the cheapest flight next week" the model itself decides
-// to call list_flights, compare prices, call change_booking, then explain.
-// (`createAgent` returns a compiled LangGraph graph — a graph used as one node
-// inside our graph.)
-//
-// Steps:
-//   1. `const agent = createAgent({ model: llm, tools: travelTools, systemPrompt, middleware })`
-//      with `middleware: [humanInTheLoopMiddleware({ interruptOn })]`. `interruptOn`
-//      (tools.ts) lists the tools that need a human's OK: after the LLM picks its
-//      tool calls and BEFORE any of them runs, the middleware asks about each one.
-//      (It uses `interrupt()` under the hood, so it needs TODO 4's checkpointer.)
-//   2. The systemPrompt is the agent's only context. Include:
-//        - its role: an airline assistant for IST->FRA flights, plus `todayLine()`
-//          (it must turn "next Friday" into a date for list_flights)
-//        - the user's account: `describeUser(state.user)` (PNR codes, balance)
-//        - rules: never invent flight ids, always get them from list_flights;
-//          act right away without asking for confirmation (the approval step
-//          does that); finish by saying what was done and the new balance.
-//   3. `const result = await agent.invoke({ messages: state.messages })`
-//      `result.messages` holds the WHOLE loop: user message, AI tool calls,
-//      tool results, final AI answer. (Log it once to see the agent think!)
-//   4. Return only the final answer: `{ messages: [result.messages.at(-1)!] }`
-//
-// 👀 `answerInfo` builds a similar prompt; the tools are in src/tools.ts.
-// ✅ Check: npx vitest run tests/unit/5-
-//    Try:   npm start -- "Move ABC123 to the evening flight on <some date>"
-//           npm start -- "Book the cheapest flight between <date> and <date>"
-//           npm start -- "Cancel ABC123 and book the evening flight on <some date> instead"
+// Note: `createAgent` itself returns a compiled LangGraph graph — we are using
+// a graph as a single node inside our own graph.
 // ─────────────────────────────────────────────────────────────────────────────
 export const travelAgent: Node = async (state) => {
-  return reply("TODO 5: implement travelAgent in src/nodes.ts");
+  const agent = createAgent({
+    model: llm,
+    tools: travelTools,
+    middleware: [humanInTheLoopMiddleware({ interruptOn })],
+    systemPrompt:
+      `You are an airline assistant for IST->FRA flights. ${todayLine()}\n` +
+      `Flights depart daily at 08:00 and 20:00. Prices are in EUR and change with the date.\n\n` +
+      `The user's account:\n${describeUser(state.user)}\n\n` +
+      `Handle the user's latest message. Use the tools to look up flights and to book, change or cancel. ` +
+      `Never invent flight ids — always get them from list_flights. When the request is clear, perform the ` +
+      `action right away (don't ask for confirmation, the system does that). When done, briefly tell the user ` +
+      `what you did and the new balance.`,
+  });
+
+  const result = await agent.invoke({ messages: state.messages });
+  return { messages: [result.messages.at(-1)!] };
 };
